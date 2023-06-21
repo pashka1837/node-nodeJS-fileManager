@@ -1,0 +1,26 @@
+{
+  "name": "nodejs-filemanager",
+  "version": "1.0.0",
+  "description": "RS_School File Manager Task",
+  "main": "./src/app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node ./src/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "eslintConfig": {
+    "extends": [
+      "wesbos"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pashka1837/node-nodeJS-fileManager.git"
+  },
+  "author": "Pavel K.",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/pashka1837/node-nodeJS-fileManager/issues"
+  },
+  "homepage": "https://github.com/pashka1837/node-nodeJS-fileManager#readme"
+}
