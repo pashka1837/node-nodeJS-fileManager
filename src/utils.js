@@ -9,29 +9,32 @@ function pathTo(filePath) {
   return { filename, dirname };
 }
 const util = {
-  async isExists(dest) {
+  async isExists(pathToDest) {
     const file = await fsPromises
-      .access(dest)
+      .access(pathToDest)
       .then(() => true)
       .catch(() => false);
     if (!file) return false;
     return true;
   },
-  async isDir(dest) {
-    const dir = await fsPromises
-      .opendir(dest)
-      .then(() => true)
-      .catch(() => false);
-    if (!dir) return false;
-    return true;
+  async isDir(pathToDest) {
+    const stat = await fsPromises.lstat(pathToDest).catch(() => false);
+    if (!stat) return false;
+    if (!stat.isDirectory()) return false;
+    const dir = await fsPromises.opendir(pathToDest).catch(() => false);
+    return dir;
   },
-  async isFile(dest) {
+  async isFile(pathToDest) {
+    const stat = await fsPromises.lstat(pathToDest).catch(() => false);
+    if (!stat) return false;
+    if (!stat.isFile()) return false;
     const file = await fsPromises
-      .open(dest)
-      .then(() => true)
-      .catch(() => false);
-    if (!file) return false;
-    return true;
+      .open(pathToDest)
+      .catch(() => console.log(`Operation failed`));
+    return file;
+  },
+  changePathView(str) {
+    return str.replace(/\\/g, '/').toLowerCase();
   },
 };
 // async function isExists(dest) {
