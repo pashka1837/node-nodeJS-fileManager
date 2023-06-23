@@ -15,23 +15,25 @@ const util = {
       .then(() => true)
       .catch(() => false);
     if (!file) return false;
-    return true;
+    return pathToDest;
   },
   async isDir(pathToDest) {
     const stat = await fsPromises.lstat(pathToDest).catch(() => false);
     if (!stat) return false;
     if (!stat.isDirectory()) return false;
-    const dir = await fsPromises.opendir(pathToDest).catch(() => false);
-    return dir;
+    return pathToDest;
+    // const dir = await fsPromises.opendir(pathToDest).catch(() => false);
+    // return dir;
   },
   async isFile(pathToDest) {
     const stat = await fsPromises.lstat(pathToDest).catch(() => false);
     if (!stat) return false;
     if (!stat.isFile()) return false;
-    const file = await fsPromises
-      .open(pathToDest)
-      .catch(() => console.log(`Operation failed`));
-    return file;
+    return pathToDest;
+    // const file = await fsPromises
+    //   .open(pathToDest)
+    //   .catch(() => console.log(`Operation failed`));
+    // return file;
   },
   changePathView(str) {
     return str.replace(/\\/g, '/').toLowerCase();

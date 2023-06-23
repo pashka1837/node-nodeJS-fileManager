@@ -1,20 +1,28 @@
 import { argv, stdout, stdin } from 'node:process';
-import { readdir, opendir, open, appendFile, rename } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import {
+  readdir,
+  readFile,
+  opendir,
+  open,
+  appendFile,
+  rename,
+  rm,
+} from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
 import * as readline from 'node:readline/promises';
-// import { pipeline } from 'node:stream/promises';
+import { pipeline } from 'node:stream/promises';
 import os from 'node:os';
-import { Transform, finished, pipeline } from 'node:stream';
-// import path as my_path from 'path';
+import { Transform, finished } from 'node:stream';
+import path from 'path';
 import { util } from './utils.js';
 
 // const { filename } = pathTo(import.meta.url);
 // const { dirname } = pathTo(import.meta.url);
 const username = getUserName(argv);
 // const homeDir = util.changePathView(os.homedir());
-// const getRootDir = () => my_path.parse(process.cwd()).root;
-// console.log(getRootDir());
-const homeDir1 = new URL('./', import.meta.url);
+const rootDir = util.changePathView(path.parse(process.cwd()).root);
+console.log(rootDir, os.homedir());
 const homeDir =
   `C:/Users/pashk/Documents/Web_Development/Edu/RSschool/node-nodeJS-fileManager/src`.toLowerCase();
 let curDir = homeDir;
@@ -51,6 +59,7 @@ function handleData(data) {
     .toLowerCase()
     .split(` `)
     .filter((command) => command !== ``);
+  console.log(commands);
   const query = {};
   if (commands.length > 1) {
     for (let i = 1; i < commands.length; i += 1) {
@@ -58,7 +67,9 @@ function handleData(data) {
         .split('/')
         .filter((char) => char !== '')
         .join('/');
-      query[`property${i}`] = curComand;
+      query[`property${i}`] = util.changePathView(
+        path.resolve(`${curDir}`, `${curComand}`)
+      );
     }
   }
   query.command = commands[0];
@@ -67,45 +78,28 @@ function handleData(data) {
 
 async function checkPath(dest, access = false, isFile = false, isDir = false) {
   if (!dest) return false;
-  let pathTo;
-  dest.includes(`c:`) ? (pathTo = dest) : (pathTo = `${curDir}/${dest}`);
-  if (access) {
-    const accessPath = await util.isExists(pathTo);
-    return accessPath && pathTo;
-  }
-  if (isFile) {
-    const file = await util.isFile(pathTo);
-    return file && file;
-  }
-  if (isDir) {
-    const dir = await util.isDir(pathTo);
-    return dir && dir;
-  }
+  if (access) return await util.isExists(dest);
+  if (isFile) return await util.isFile(dest);
+  if (isDir) return await util.isDir(dest);
 }
 
 async function runCommandCD(pathTo) {
-  console.log(`in cd`, pathTo);
-  const dir = await checkPath(pathTo, false, false, true);
-  if (!dir) return console.log(`Invalid input`);
-  curDir = dir.path.toLowerCase();
+  const pathToDir = await checkPath(pathTo, false, false, true);
+  if (!pathToDir) return console.log(`Invalid input`);
+  curDir = pathToDir;
   console.log(`You are currently in ${curDir}`);
-  await dir.close();
 }
 
-function runCommandUP() {
-  if (curDir === `C:`) return console.log(`You are currently in ${curDir}`);
-  curDir = curDir.split('/');
-  curDir.pop();
-  curDir = curDir.join('/');
-  console.log(`You are currently in ${curDir}`);
+async function runCommandUP() {
+  await handleLines(`cd ..`);
 }
 
 async function runCommandLS() {
   try {
-    const files = await readdir(curDir, { withFileTypes: true });
+    const files = await readdir(`${curDir}`, { withFileTypes: true });
     const modFiles = files.map((file) => {
-      if (file.isDirectory) return { Name: file.name, Type: 'directory' };
-      if (file.isFile) return { Name: file.name, Type: 'file' };
+      if (file.isDirectory()) return { Name: file.name, Type: 'directory' };
+      if (file.isFile()) return { Name: file.name, Type: 'file' };
       return { Name: file.name, Type: 'unknown' };
     });
     console.log(`You are currently in ${curDir}`);
@@ -116,10 +110,9 @@ async function runCommandLS() {
 }
 
 async function runCommandCAT(pathTo) {
-  const file = await checkPath(pathTo, false, true);
-  console.log(file);
-  if (!file) return console.log(`Invalid input`);
-  const readStream = file.createReadStream();
+  const pathToFile = await checkPath(pathTo, false, true);
+  if (!pathToFile) return console.log(`Invalid input`);
+  const readStream = createReadStream(pathToFile);
   let str = ``;
   for await (const chunk of readStream) {
     str += chunk;
@@ -131,19 +124,60 @@ async function runCommandCAT(pathTo) {
 async function runCommandADD(fileName) {
   if (await checkPath(fileName, true))
     return console.log(`File already exists`);
-  await appendFile(`${curDir}/${fileName}`, '')
+  await appendFile(fileName, '')
     .then(() => console.log(`You are currently in ${curDir}`))
     .catch(() => console.log(`Operation failed`));
 }
-async function runCommandRN(pathToFile, newFileName) {
-  const oldPath = await checkPath(pathToFile, true);
-  if (!oldPath) return console.log(`Invalid input`);
-  let newPath = oldPath.split('/');
-  newPath.pop();
-  newPath = `${newPath.join('/')}/${newFileName}`;
-  await rename(pathToFile, newPath).catch(() =>
+
+async function runCommandRN(pathToOldFile, pathToNewFile) {
+  if (!(await checkPath(pathToOldFile, true)))
+    return console.log(`Invalid input`);
+  if (await checkPath(pathToNewFile, true))
+    return console.log(`File with this name is already exists`);
+  await rename(pathToOldFile, pathToNewFile)
+    .then(() => console.log(`You are currently in ${curDir}`))
+    .catch(() => console.log(`Operation failed`));
+}
+
+async function runCommandCP(pathToFile, pathToNewDir) {
+  if (!(await checkPath(pathToFile, false, true)))
+    return console.log(`Invalid input`);
+  if (!(await checkPath(pathToNewDir, false, false, true)))
+    return console.log(`Invalid input`);
+  const fileName = pathToFile.split('/').pop();
+  if (await checkPath(`${pathToNewDir}/${fileName}`, false, true))
+    return console.log(`File with this name is already exists`);
+  try {
+    await pipeline(
+      createReadStream(pathToFile),
+      createWriteStream(`${pathToNewDir}/${fileName}`)
+    );
+    console.log(`You are currently in ${curDir}`);
+  } catch {
+    console.log(`Operation failed`);
+  }
+}
+async function runCommandMV(pathToFile, pathToNewDir) {
+  await runCommandCP(pathToFile, pathToNewDir);
+  await rm(pathToFile).catch(() => console.log(`Operation failed`));
+}
+
+async function runCommandRM(pathToFile) {
+  if (!(await checkPath(pathToFile, false, true)))
+    return console.log(`Invalid input`);
+  await rm(pathToFile)
+    .then(() => console.log(`You are currently in ${curDir}`))
+    .catch(() => console.log(`Operation failed`));
+}
+
+async function runCommandHASH(pathToFile) {
+  if (!(await checkPath(pathToFile, false, true)))
+    return console.log(`Invalid input`);
+  const fileContent = await readFile(pathToFile).catch(() =>
     console.log(`Operation failed`)
   );
+  const hash = createHash(`sha256`).update(fileContent).digest(`hex`);
+  console.log(`You are currently in ${curDir}\n`, hash);
 }
 
 async function handleLines(data) {
@@ -173,10 +207,27 @@ async function handleLines(data) {
     case 'rn':
       await runCommandRN(query.property1, query.property2);
       break;
+    case 'cp':
+      await runCommandCP(query.property1, query.property2);
+      break;
+    case 'mv':
+      await runCommandMV(query.property1, query.property2);
+      break;
+    case 'rm':
+      await runCommandRM(query.property1);
+      break;
+    case 'hash':
+      await runCommandHASH(query.property1);
+      break;
     default:
       console.log(`Invalid input`);
   }
 }
+process.on('exit', () =>
+  console.log(
+    `Thank you for using File Manager, ${username}, goodbye! ${os.EOL}`
+  )
+);
 
 function runFM() {
   stdout.write(
