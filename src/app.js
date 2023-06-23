@@ -9,11 +9,7 @@ import os from 'node:os';
 import path from 'path';
 import { util } from './utils.js';
 
-const username = getUserName(argv);
-// const homeDir = util.changePathView(os.homedir());
-const rootDir = util.changePathView(path.parse(process.cwd()).root);
-const homeDir =
-  `C:/Users/pashk/Documents/Web_Development/Edu/RSschool/node-nodeJS-fileManager/src`.toLowerCase();
+const homeDir = util.changePathView(os.homedir());
 let curDir = homeDir;
 const rl = readline.createInterface({
   input: stdin,
@@ -37,24 +33,22 @@ function handleData(data) {
     .toLowerCase()
     .split(` `)
     .filter((command) => command !== ``);
+  if (commands.length > 3) return false;
   console.log(commands);
   const query = {};
   if (commands.length > 1) {
-    for (let i = 1; i < commands.length; i += 1) {
-      const curComand = commands[i];
-      // .split('/')
-      // .filter((char) => char !== '')
-      // .join('/');
-      query[`property${i}`] = util.changePathView(
-        path.resolve(`${curDir}`, `${curComand}`)
+    commands.slice(1).forEach((command, i) => {
+      query[`property${i + 1}`] = util.changePathView(
+        path.resolve(`${curDir}`, `${command}`)
       );
-    }
+    });
   }
   query.command = commands[0];
   return query;
 }
 
 async function runCommandCD(pathToDir) {
+  console.log(`in cd`, pathToDir);
   if (!(await util.isDir(pathToDir))) return console.log(`Invalid input`);
   process.chdir(pathToDir);
   curDir = pathToDir;
@@ -84,11 +78,8 @@ async function runCommandCAT(pathToFile) {
   if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
   const readStream = createReadStream(pathToFile);
   let str = ``;
-  for await (const chunk of readStream) {
-    str += chunk;
-  }
-  console.log(`You are currently in ${curDir}`);
-  stdout.write(`${str}\n`);
+  for await (const chunk of readStream) str += chunk;
+  console.log(`You are currently in ${curDir}\n${str}\n`);
 }
 
 async function runCommandADD(pathToFile) {
@@ -121,13 +112,15 @@ async function runCommandCP(pathToFile, pathToNewDir) {
       createWriteStream(`${pathToNewDir}/${fileName}`)
     );
     console.log(`You are currently in ${curDir}`);
+    return true;
   } catch {
     console.log(`Operation failed`);
+    return false;
   }
 }
 async function runCommandMV(pathToFile, pathToNewDir) {
-  await runCommandCP(pathToFile, pathToNewDir);
-  await rm(pathToFile).catch(() => console.log(`Operation failed`));
+  (await runCommandCP(pathToFile, pathToNewDir)) &&
+    (await rm(pathToFile).catch(() => console.log(`Operation failed`)));
 }
 
 async function runCommandRM(pathToFile) {
@@ -181,12 +174,41 @@ async function runCommandDECOMPRESS(pathToFile, pathToDest) {
   await runCommandCOMPRESS(pathToFile, pathToDest, true);
 }
 
+async function runCommandOS(data) {
+  const commands = data
+    .toLowerCase()
+    .split(` `)
+    .filter((command) => command !== ``);
+  if (!commands[1] || commands.length > 2) return console.log(`Invalid input`);
+  switch (commands[1]) {
+    case '--eol':
+      console.log(os.EOL);
+      break;
+    case '--cpus':
+      console.log(os.cpus());
+      break;
+    case '--homedir':
+      console.log(homeDir);
+      break;
+    case '--username':
+      try {
+        const user = os.userInfo().username;
+        console.log(user);
+      } catch {
+        console.log(`No user detected`);
+      }
+      break;
+    case '--architecture':
+      console.log(os.arch());
+      break;
+    default:
+      console.log(`Invalid input`);
+  }
+}
+
 async function handleLines(data) {
   const query = handleData(data);
-  if (query.command === `.exit`) {
-    rl.close();
-    return process.exit();
-  }
+  if (query.command === `.exit`) return rl.close();
   switch (query.command) {
     case 'cd':
       await runCommandCD(query.property1);
@@ -224,17 +246,21 @@ async function handleLines(data) {
     case 'decompress':
       await runCommandDECOMPRESS(query.property1, query.property2);
       break;
+    case 'os':
+      await runCommandOS(data);
+      break;
     default:
       console.log(`Invalid input`);
   }
 }
 
-function runFM() {
-  stdout.write(
+async function runFM() {
+  const username = getUserName(argv);
+  console.log(
     `Welcome to the File Manager, ${username}! ${os.EOL}You are currently in ${curDir} ${os.EOL}`
   );
   process.chdir(homeDir);
-  rl.on(`line`, handleLines);
+  for await (const line of rl) handleLines(line);
   process.on('exit', () =>
     console.log(
       `Thank you for using File Manager, ${username}, goodbye! ${os.EOL}`
@@ -242,4 +268,4 @@ function runFM() {
   );
 }
 
-runFM();
+await runFM();
