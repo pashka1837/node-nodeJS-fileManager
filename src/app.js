@@ -1,28 +1,17 @@
-import { argv, stdout, stdin } from 'node:process';
-import {
-  readdir,
-  readFile,
-  opendir,
-  open,
-  appendFile,
-  rename,
-  rm,
-} from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { readdir, readFile, appendFile, rename, rm } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
+import { argv, stdout, stdin } from 'node:process';
+import { createGzip, createUnzip } from 'node:zlib';
 import * as readline from 'node:readline/promises';
 import { pipeline } from 'node:stream/promises';
+import { createHash } from 'node:crypto';
 import os from 'node:os';
-import { Transform, finished } from 'node:stream';
 import path from 'path';
 import { util } from './utils.js';
 
-// const { filename } = pathTo(import.meta.url);
-// const { dirname } = pathTo(import.meta.url);
 const username = getUserName(argv);
 // const homeDir = util.changePathView(os.homedir());
 const rootDir = util.changePathView(path.parse(process.cwd()).root);
-console.log(rootDir, os.homedir());
 const homeDir =
   `C:/Users/pashk/Documents/Web_Development/Edu/RSschool/node-nodeJS-fileManager/src`.toLowerCase();
 let curDir = homeDir;
@@ -32,17 +21,6 @@ const rl = readline.createInterface({
   removeHistoryDuplicates: true,
   historySize: 4,
 });
-
-// const myTrans = new Transform({
-//   transform(chunk, ecnoding, callback) {
-//     const str = chunk.toString();
-//     let newStr = ``;
-//     for (let i = str.length - 1; i > -1; i--) {
-//       newStr += str[i];
-//     }
-//     callback(null, `${newStr}\n`);
-//   },
-// });
 
 function getUserName(myArgs) {
   let usernameArg = myArgs.slice(2)[0];
@@ -63,10 +41,10 @@ function handleData(data) {
   const query = {};
   if (commands.length > 1) {
     for (let i = 1; i < commands.length; i += 1) {
-      const curComand = commands[i]
-        .split('/')
-        .filter((char) => char !== '')
-        .join('/');
+      const curComand = commands[i];
+      // .split('/')
+      // .filter((char) => char !== '')
+      // .join('/');
       query[`property${i}`] = util.changePathView(
         path.resolve(`${curDir}`, `${curComand}`)
       );
@@ -76,16 +54,9 @@ function handleData(data) {
   return query;
 }
 
-async function checkPath(dest, access = false, isFile = false, isDir = false) {
-  if (!dest) return false;
-  if (access) return await util.isExists(dest);
-  if (isFile) return await util.isFile(dest);
-  if (isDir) return await util.isDir(dest);
-}
-
-async function runCommandCD(pathTo) {
-  const pathToDir = await checkPath(pathTo, false, false, true);
-  if (!pathToDir) return console.log(`Invalid input`);
+async function runCommandCD(pathToDir) {
+  if (!(await util.isDir(pathToDir))) return console.log(`Invalid input`);
+  process.chdir(pathToDir);
   curDir = pathToDir;
   console.log(`You are currently in ${curDir}`);
 }
@@ -109,9 +80,8 @@ async function runCommandLS() {
   }
 }
 
-async function runCommandCAT(pathTo) {
-  const pathToFile = await checkPath(pathTo, false, true);
-  if (!pathToFile) return console.log(`Invalid input`);
+async function runCommandCAT(pathToFile) {
+  if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
   const readStream = createReadStream(pathToFile);
   let str = ``;
   for await (const chunk of readStream) {
@@ -121,18 +91,18 @@ async function runCommandCAT(pathTo) {
   stdout.write(`${str}\n`);
 }
 
-async function runCommandADD(fileName) {
-  if (await checkPath(fileName, true))
+async function runCommandADD(pathToFile) {
+  if (await util.isExists(pathToFile))
     return console.log(`File already exists`);
-  await appendFile(fileName, '')
+  await appendFile(pathToFile, '')
     .then(() => console.log(`You are currently in ${curDir}`))
     .catch(() => console.log(`Operation failed`));
 }
 
 async function runCommandRN(pathToOldFile, pathToNewFile) {
-  if (!(await checkPath(pathToOldFile, true)))
+  if (!(await util.isExists(pathToOldFile)))
     return console.log(`Invalid input`);
-  if (await checkPath(pathToNewFile, true))
+  if (await util.isExists(pathToNewFile))
     return console.log(`File with this name is already exists`);
   await rename(pathToOldFile, pathToNewFile)
     .then(() => console.log(`You are currently in ${curDir}`))
@@ -140,12 +110,10 @@ async function runCommandRN(pathToOldFile, pathToNewFile) {
 }
 
 async function runCommandCP(pathToFile, pathToNewDir) {
-  if (!(await checkPath(pathToFile, false, true)))
-    return console.log(`Invalid input`);
-  if (!(await checkPath(pathToNewDir, false, false, true)))
-    return console.log(`Invalid input`);
+  if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
+  if (!(await util.isDir(pathToNewDir))) return console.log(`Invalid input`);
   const fileName = pathToFile.split('/').pop();
-  if (await checkPath(`${pathToNewDir}/${fileName}`, false, true))
+  if (await util.isFile(`${pathToNewDir}/${fileName}`))
     return console.log(`File with this name is already exists`);
   try {
     await pipeline(
@@ -163,30 +131,61 @@ async function runCommandMV(pathToFile, pathToNewDir) {
 }
 
 async function runCommandRM(pathToFile) {
-  if (!(await checkPath(pathToFile, false, true)))
-    return console.log(`Invalid input`);
+  if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
   await rm(pathToFile)
     .then(() => console.log(`You are currently in ${curDir}`))
     .catch(() => console.log(`Operation failed`));
 }
 
 async function runCommandHASH(pathToFile) {
-  if (!(await checkPath(pathToFile, false, true)))
-    return console.log(`Invalid input`);
+  if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
   const fileContent = await readFile(pathToFile).catch(() =>
     console.log(`Operation failed`)
   );
   const hash = createHash(`sha256`).update(fileContent).digest(`hex`);
   console.log(`You are currently in ${curDir}\n`, hash);
 }
+async function handleZIP(from, to, kindOfZip) {
+  try {
+    await pipeline(createReadStream(from), kindOfZip, createWriteStream(to));
+    console.log(`You are currently in ${curDir}`);
+  } catch {
+    console.log(`Operation failed`);
+  }
+}
+
+async function runCommandCOMPRESS(pathToFile, pathToDest, unzip = false) {
+  if (!(await util.isFile(pathToFile))) return console.log(`Invalid input`);
+  let fileName = `${pathToFile.split('/').pop().split('.')[0]}`;
+  let zip;
+  if (unzip) {
+    zip = createUnzip();
+    fileName += '.txt';
+  } else {
+    zip = createGzip();
+    fileName += `.gz`;
+  }
+  const fileDest = `${pathToDest}/${fileName}`;
+  if (await util.isDir(pathToDest)) {
+    if (await util.isFile(fileDest))
+      return console.log(`This file is already exists`);
+    await handleZIP(pathToFile, fileDest, zip);
+    return;
+  }
+  if (await util.isFile(pathToDest))
+    return console.log(`This file is already exists`);
+  await handleZIP(pathToFile, pathToDest, zip);
+}
+
+async function runCommandDECOMPRESS(pathToFile, pathToDest) {
+  await runCommandCOMPRESS(pathToFile, pathToDest, true);
+}
 
 async function handleLines(data) {
   const query = handleData(data);
   if (query.command === `.exit`) {
-    stdout.write(
-      `Thank you for using File Manager, ${username}, goodbye! ${os.EOL}`
-    );
-    return rl.close();
+    rl.close();
+    return process.exit();
   }
   switch (query.command) {
     case 'cd':
@@ -219,21 +218,28 @@ async function handleLines(data) {
     case 'hash':
       await runCommandHASH(query.property1);
       break;
+    case 'compress':
+      await runCommandCOMPRESS(query.property1, query.property2);
+      break;
+    case 'decompress':
+      await runCommandDECOMPRESS(query.property1, query.property2);
+      break;
     default:
       console.log(`Invalid input`);
   }
 }
-process.on('exit', () =>
-  console.log(
-    `Thank you for using File Manager, ${username}, goodbye! ${os.EOL}`
-  )
-);
 
 function runFM() {
   stdout.write(
     `Welcome to the File Manager, ${username}! ${os.EOL}You are currently in ${curDir} ${os.EOL}`
   );
+  process.chdir(homeDir);
   rl.on(`line`, handleLines);
+  process.on('exit', () =>
+    console.log(
+      `Thank you for using File Manager, ${username}, goodbye! ${os.EOL}`
+    )
+  );
 }
 
 runFM();
