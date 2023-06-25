@@ -1,7 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as fsPromises from 'node:fs/promises';
-import * as fs from 'node:fs';
+import { access, lstat } from 'node:fs/promises';
 
 function pathTo(filePath) {
   const filename = fileURLToPath(filePath);
@@ -11,8 +10,7 @@ function pathTo(filePath) {
 const util = {
   async isExists(pathToDest) {
     if (!pathToDest) return false;
-    const file = await fsPromises
-      .access(pathToDest)
+    const file = await access(pathToDest)
       .then(() => true)
       .catch(() => false);
     if (!file) return false;
@@ -20,14 +18,14 @@ const util = {
   },
   async isDir(pathToDest) {
     if (!pathToDest) return false;
-    const stat = await fsPromises.lstat(pathToDest).catch(() => false);
+    const stat = await lstat(pathToDest).catch(() => false);
     if (!stat) return false;
     if (!stat.isDirectory()) return false;
     return true;
   },
   async isFile(pathToDest) {
     if (!pathToDest) return false;
-    const stat = await fsPromises.lstat(pathToDest).catch(() => false);
+    const stat = await lstat(pathToDest).catch(() => false);
     if (!stat) return false;
     if (!stat.isFile()) return false;
     return true;

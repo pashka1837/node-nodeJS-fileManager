@@ -22,8 +22,5 @@
   "bugs": {
     "url": "https://github.com/pashka1837/node-nodeJS-fileManager/issues"
   },
-  "homepage": "https://github.com/pashka1837/node-nodeJS-fileManager#readme",
-  "dependencies": {
-    "eslint-config-wesbos": "^3.2.3"
-  }
+  "homepage": "https://github.com/pashka1837/node-nodeJS-fileManager#readme"
 }
